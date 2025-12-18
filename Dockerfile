@@ -1,23 +1,28 @@
-FROM bellsoft/liberica-runtime-container:jdk-25-stream-musl as builder
-WORKDIR /home/app
+# ═══════════════════════════════════════
+# STAGE 1: Builder
+# ═══════════════════════════════════════
+FROM bellsoft/liberica-openjdk-alpine:25 AS builder
+WORKDIR /app
 COPY pom.xml .
 COPY src ./src
-# Install Maven 3.9
-RUN apk add --no-cache maven
-RUN mvn clean compile spring-boot:process-aot package -DskipTests=true
+RUN mvn clean package -DskipTests
 
-FROM bellsoft/liberica-runtime-container:jdk-25-cds-slim-musl as optimizer
-WORKDIR /app
-COPY --from=builder /home/app/target/demo-1.0-SNAPSHOT.jar app.jar
-RUN java -Djarmode=tools -jar app.jar extract --destination extracted
-RUN ls -l /app/extracted
+# ═══════════════════════════════════════
+# STAGE 2: Runtime
+# ═══════════════════════════════════════
+FROM bellsoft/liberica-runtime-container:jre-25-slim-musl
 
-FROM bellsoft/liberica-runtime-container:jdk-25-cds-slim-musl
+# ⚠️ Bonne pratique : Ne pas utiliser root
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
 WORKDIR /app
+COPY --from=builder --chown=appuser:appgroup /app/target/*.jar app.jar
+
 EXPOSE 8080
-ENV MONGODB_COLLECTION_NAME=persons
-ENTRYPOINT ["java", "-Dspring.aot.enabled=true", "-XX:AOTCache=app.aot", "-Dspring.profiles.active=docker", "-jar", "/app/app.jar"]
-COPY --from=optimizer /app/extracted/lib/ ./lib/
-COPY --from=optimizer /app/extracted/app.jar ./
-RUN ls -l /app
-RUN java -Dspring.aot.enabled=true -Dspring.context.exit=onRefresh -XX:AOTCacheOutput=app.aot -jar /app/app.jar
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
