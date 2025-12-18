@@ -11,12 +11,12 @@ on:
 
 permissions:
   security-events: write
-  contents: read
+  contents: read 
   actions: read
 
 jobs:
   # ═══════════════════════════════════════════════
-  # Les jobs seront ajoutés progressivement dans les exercices suivants
+  # Les jobs s. eront ajoutés progressivement dans les exercices suivants
   # ═══════════════════════════════════════════════
 
   build-and-test : 
